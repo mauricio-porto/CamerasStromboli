@@ -1,3 +1,12 @@
+/* 
+Programa da câmera IP baseado no programa original desenvolvido por Rui Santos
+ 
+  IMPORTANTE!!! 
+   - Em Placa selecione "ESP32 Wrover Module"
+   - Em Partion Scheme selecione "Huge APP (3MB No OTA)"
+   - Para carregar o código é necessário que o GPIO 0 esteja conectado ao GND
+*/
+ 
 #include "esp_camera.h"
 #include <WiFi.h>
 #include "esp_timer.h"
@@ -7,10 +16,13 @@
 #include "soc/soc.h" 
 #include "soc/rtc_cntl_reg.h"
 #include "esp_http_server.h"
-
+ 
 //Configuração da rede WiFi
-static const char* ssid = "Stromboli";
-static const char* password = "stromboli";
+//const char* ssid = "MAURICIO";
+//const char* password = "994151979";
+ 
+const char* ssid = "Stromboli";
+const char* password = "stromboli";
 
 #define PART_BOUNDARY "123456789000000000000987654321"
  
@@ -35,10 +47,10 @@ static const char* password = "stromboli";
 static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
-
-static httpd_handle_t server = NULL;
-
-static esp_err_t stream_handler(httpd_req_t *req) {
+ 
+httpd_handle_t stream_httpd = NULL;
+ 
+static esp_err_t stream_handler(httpd_req_t *req){
   camera_fb_t * fb = NULL;
   esp_err_t res = ESP_OK;
   size_t _jpg_buf_len = 0;
@@ -49,10 +61,9 @@ static esp_err_t stream_handler(httpd_req_t *req) {
   if(res != ESP_OK){
     return res;
   }
-
+ 
   digitalWrite(4, HIGH);
-
-  while (true) {
+  while(true){
     fb = esp_camera_fb_get();
     if (!fb) {
       Serial.println("Camera capture failed");
@@ -91,11 +102,14 @@ static esp_err_t stream_handler(httpd_req_t *req) {
       free(_jpg_buf);
       _jpg_buf = NULL;
     }
+    if(res != ESP_OK){
+      break;
+    }
     //Serial.printf("MJPG: %uB\n",(uint32_t)(_jpg_buf_len));
   }
   return res;
 }
-
+ 
 static esp_err_t flash_handler(httpd_req_t *req) {
   digitalWrite(4, LOW);
   const char resp[] = "APAGOU O FLASH";
@@ -103,7 +117,7 @@ static esp_err_t flash_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
-void startCameraServer() {
+void startCameraServer(){
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
  
@@ -121,10 +135,10 @@ void startCameraServer() {
     .user_ctx  = NULL
   };
 
-  Serial.printf("Starting web server on port: '%d'\n", config.server_port);
-  if (httpd_start(&server, &config) == ESP_OK) {
-    httpd_register_uri_handler(server, &index_uri);
-    httpd_register_uri_handler(server, &flash_uri);
+  //Serial.printf("Starting web server on port: '%d'\n", config.server_port);
+  if (httpd_start(&stream_httpd, &config) == ESP_OK) {
+    httpd_register_uri_handler(stream_httpd, &index_uri);
+    httpd_register_uri_handler(stream_httpd, &flash_uri);
   }
 }
  
@@ -160,12 +174,13 @@ void setup() {
   config.jpeg_quality = 10;
   config.fb_count = 2;
    
+  // Iniciação da câmera
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
-
+  // Conexão WiFi
 //  WiFi.begin(ssid, password);
 //  while (WiFi.status() != WL_CONNECTED) {
 //    delay(500);
@@ -173,14 +188,15 @@ void setup() {
 //  }
 //  Serial.println("");
 //  Serial.println("WiFi connected");
+   
 
   Serial.println(WiFi.softAP(ssid, password) ? "SoftAP ready":"SoftAP failed");
   IPAddress myIP = WiFi.softAPIP();
 
+  // Início da transmissão no servidor Web
   startCameraServer();
   Serial.print("Camera Stream Ready! Go to: http://");
   Serial.print(myIP);
-
 }
  
 void loop() {
