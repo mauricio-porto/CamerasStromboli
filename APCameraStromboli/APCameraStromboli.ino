@@ -1,29 +1,16 @@
-#include <TaskScheduler.h>
-
 #include "esp_camera.h"
 #include <WiFi.h>
-#include <WiFiClient.h>
-#include <WiFiAP.h>
 #include "esp_timer.h"
-#include "esp_wifi.h"
 #include "img_converters.h"
 #include "Arduino.h"
 #include "fb_gfx.h"
 #include "soc/soc.h" 
 #include "soc/rtc_cntl_reg.h"
 #include "esp_http_server.h"
-#include "driver/rtc_io.h"
- 
-// Prototypes
-static void sendStream();
- 
+
 //Configuração da rede WiFi
-const char* ssid = "Stromboli";
-const char* password = "stromboli";
-
-Scheduler runner;
-
-Task taskSendStream(100 * TASK_MILLISECOND, TASK_FOREVER, &sendStream);
+static const char* ssid = "Stromboli";
+static const char* password = "stromboli";
 
 #define PART_BOUNDARY "123456789000000000000987654321"
  
@@ -49,8 +36,7 @@ static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" 
 static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
 
-httpd_handle_t server = NULL;
-httpd_req_t *request;
+static httpd_handle_t server = NULL;
 
 static esp_err_t stream_handler(httpd_req_t *req) {
   camera_fb_t * fb = NULL;
@@ -65,65 +51,53 @@ static esp_err_t stream_handler(httpd_req_t *req) {
   }
 
   digitalWrite(4, HIGH);
-  request = req;
-  Serial.printf("req: %X\n", req);
-  Serial.printf("request: %X\n", request);
-  taskSendStream.enable();
-  return res;
-}
 
-static void sendStream() {
-  camera_fb_t * fb = NULL;
-  esp_err_t res = ESP_OK;
-  size_t _jpg_buf_len = 0;
-  uint8_t * _jpg_buf = NULL;
-  char * part_buf[64];
-
-  Serial.printf("request: %X\n", request);
-  fb = esp_camera_fb_get();
-  if (!fb) {
-    Serial.println("Camera capture failed");
-    res = ESP_FAIL;
-  } else {
-    if(fb->width > 400){
-      if(fb->format != PIXFORMAT_JPEG){
-        bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
-        esp_camera_fb_return(fb);
-        fb = NULL;
-        if(!jpeg_converted){
-          Serial.println("JPEG compression failed");
-          res = ESP_FAIL;
+  while (true) {
+    fb = esp_camera_fb_get();
+    if (!fb) {
+      Serial.println("Camera capture failed");
+      res = ESP_FAIL;
+    } else {
+      if(fb->width > 400){
+        if(fb->format != PIXFORMAT_JPEG){
+          bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
+          esp_camera_fb_return(fb);
+          fb = NULL;
+          if(!jpeg_converted){
+            Serial.println("JPEG compression failed");
+            res = ESP_FAIL;
+          }
+        } else {
+          _jpg_buf_len = fb->len;
+          _jpg_buf = fb->buf;
         }
-      } else {
-        _jpg_buf_len = fb->len;
-        _jpg_buf = fb->buf;
       }
     }
+    if(res == ESP_OK){
+      size_t hlen = snprintf((char *)part_buf, 64, _STREAM_PART, _jpg_buf_len);
+      res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+    }
+    if(res == ESP_OK){
+      res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
+    }
+    if(res == ESP_OK){
+      res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
+    }
+    if(fb){
+      esp_camera_fb_return(fb);
+      fb = NULL;
+      _jpg_buf = NULL;
+    } else if(_jpg_buf){
+      free(_jpg_buf);
+      _jpg_buf = NULL;
+    }
+    //Serial.printf("MJPG: %uB\n",(uint32_t)(_jpg_buf_len));
   }
-  if(res == ESP_OK){
-    size_t hlen = snprintf((char *)part_buf, 64, _STREAM_PART, _jpg_buf_len);
-    res = httpd_resp_send_chunk(request, (const char *)part_buf, hlen);
-  }
-  if(res == ESP_OK){
-    res = httpd_resp_send_chunk(request, (const char *)_jpg_buf, _jpg_buf_len);
-  }
-  if(res == ESP_OK){
-    res = httpd_resp_send_chunk(request, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
-  }
-  if(fb){
-    esp_camera_fb_return(fb);
-    fb = NULL;
-    _jpg_buf = NULL;
-  } else if(_jpg_buf){
-    free(_jpg_buf);
-    _jpg_buf = NULL;
-  }
-  Serial.printf("MJPG: %uB\n",(uint32_t)(_jpg_buf_len));
+  return res;
 }
 
 static esp_err_t flash_handler(httpd_req_t *req) {
   digitalWrite(4, LOW);
-  taskSendStream.disable();
   const char resp[] = "APAGOU O FLASH";
   httpd_resp_send(req, resp, strlen(resp));
   return ESP_OK;
@@ -203,13 +177,12 @@ void setup() {
   Serial.println(WiFi.softAP(ssid, password) ? "SoftAP ready":"SoftAP failed");
   IPAddress myIP = WiFi.softAPIP();
 
-  runner.addTask(taskSendStream);
   startCameraServer();
   Serial.print("Camera Stream Ready! Go to: http://");
   Serial.print(myIP);
+
 }
  
 void loop() {
-  runner.execute();
-//  delay(1);
+  delay(1);
 }
