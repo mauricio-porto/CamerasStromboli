@@ -16,13 +16,14 @@ Programa da câmera IP baseado no programa original desenvolvido por Rui Santos
 #include "soc/soc.h" 
 #include "soc/rtc_cntl_reg.h"
 #include "esp_http_server.h"
+#include "TaskScheduler.h"
  
 //Configuração da rede WiFi
-//const char* ssid = "MAURICIO";
-//const char* password = "994151979";
- 
-const char* ssid = "Stromboli";
-const char* password = "stromboli";
+const char* ssid = "Zer0";
+const char* password = "zer0";
+
+// Prototypes
+void doNothing();
 
 #define PART_BOUNDARY "123456789000000000000987654321"
  
@@ -49,7 +50,12 @@ static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
  
 httpd_handle_t stream_httpd = NULL;
- 
+
+Scheduler runner;
+Task taskNothing(100, TASK_FOREVER, &doNothing);
+
+static boolean sendStream = true;
+
 static esp_err_t stream_handler(httpd_req_t *req){
   camera_fb_t * fb = NULL;
   esp_err_t res = ESP_OK;
@@ -63,7 +69,7 @@ static esp_err_t stream_handler(httpd_req_t *req){
   }
  
   digitalWrite(4, HIGH);
-  while(true){
+  while(sendStream) {
     fb = esp_camera_fb_get();
     if (!fb) {
       Serial.println("Camera capture failed");
@@ -197,8 +203,17 @@ void setup() {
   startCameraServer();
   Serial.print("Camera Stream Ready! Go to: http://");
   Serial.print(myIP);
+
+
+  runner.addTask(taskNothing);
+  taskNothing.enable();
 }
  
 void loop() {
-  delay(1);
+  runner.execute();
+  //delay(1);
+}
+
+void doNothing() {
+  
 }
