@@ -19,8 +19,8 @@ Programa da câmera IP baseado no programa original desenvolvido por Rui Santos
 #include "TaskScheduler.h"
  
 //Configuração da rede WiFi
-const char* ssid = "Zer0";
-const char* password = "zer0";
+const char* ssid = "Zer0Pedro";
+const char* password = "zer0pedro";
 
 // Prototypes
 void doNothing();
@@ -69,6 +69,7 @@ static esp_err_t stream_handler(httpd_req_t *req){
   }
  
   digitalWrite(4, HIGH);
+  sendStream = true;
   while(sendStream) {
     fb = esp_camera_fb_get();
     if (!fb) {
@@ -117,6 +118,7 @@ static esp_err_t stream_handler(httpd_req_t *req){
 }
  
 static esp_err_t flash_handler(httpd_req_t *req) {
+  sendStream = false;
   digitalWrite(4, LOW);
   const char resp[] = "APAGOU O FLASH";
   httpd_resp_send(req, resp, strlen(resp));
