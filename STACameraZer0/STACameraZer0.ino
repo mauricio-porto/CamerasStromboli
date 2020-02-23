@@ -188,24 +188,25 @@ void setup() {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
+
   // Conexão WiFi
-//  WiFi.begin(ssid, password);
-//  while (WiFi.status() != WL_CONNECTED) {
-//    delay(500);
-//    Serial.print(".");
-//  }
-//  Serial.println("");
-//  Serial.println("WiFi connected");
-   
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
 
-  WiFi.mode(WIFI_AP_STA);
-  
-  Serial.println(WiFi.softAP(ssid, password) ? "SoftAP ready":"SoftAP failed");
-  delay(100); // wait 100ms for AP_START
-
-  WiFi.softAPConfig(IPAddress(192,168,69,1), IPAddress(192,168,69,1),IPAddress(255,255,255,0));
-
-  IPAddress myIP = WiFi.softAPIP();
+//  WiFi.mode(WIFI_AP_STA);
+//  
+//  Serial.println(WiFi.softAP(ssid, password) ? "SoftAP ready":"SoftAP failed");
+//  delay(100); // wait 100ms for AP_START
+//
+//  WiFi.softAPConfig(IPAddress(192,168,69,1), IPAddress(192,168,69,1),IPAddress(255,255,255,0));
+//
+//  IPAddress myIP = WiFi.softAPIP();
+  IPAddress myIP = WiFi.localIP();
 
   // Início da transmissão no servidor Web
   startCameraServer();
